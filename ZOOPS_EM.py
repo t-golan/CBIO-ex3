@@ -72,9 +72,9 @@ def main():
     print(seq_lst)
 
     # run Baum-Welch
-    prev_iter = Baum_Welch_iteration(transition_mat, emmisions_mat, seqs)
+    prev_iter = Baum_Welch_iteration(transition_mat, initial_ems, seq_lst)
     while(True):
-        cur_iter = Baum_Welch_iteration(transition_mat, emmisions_mat, seqs)
+        cur_iter = Baum_Welch_iteration(transition_mat, initial_ems, seq_lst)
         if cur_iter - prev_iter < args.convergenceThr:
             break
         prev_iter = cur_iter
