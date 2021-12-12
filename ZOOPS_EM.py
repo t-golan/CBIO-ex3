@@ -65,18 +65,25 @@ def get_qp_round(transiton_matrix):
 
 
 def get_likelihood_Nkx_Nkl(emission_mat, transition_mat, seq_lst):
+    # N_kx is size of emissions matrix (only for AGCT)
     N_kx = np.full((transition_mat.shape[0], 4), np.NINF)
+    # Nkl is size of transitions matrix
     N_kl = np.full((transition_mat.shape[0], transition_mat.shape[0]), np.NINF)
+
     sum_ll = 0
     for seq in seq_lst:
         post_ems, post_trans, likelihood = trans_ems_post(transition_mat, emission_mat, seq)
         sum_ll += likelihood
         with np.errstate(divide='ignore'):
-            N_kl = np.log(np.exp(N_kl) + np.exp(post_trans))
+            N_kl = np.logaddexp(N_kl, post_trans)
+        #iterate over ACGT (in same order as they appear in emissions df)
         for j, ch in enumerate("ACGT"):
+            # get all indexes of letter in sequence
             idx = [i for i, ltr in enumerate(seq) if ltr == ch]
             if len(idx) != 0:
-                N_kx[:, j] = np.logaddexp(N_kx[:, j], logsumexp(post_ems.take(idx, axis=1), axis=1))
+                # logsumexp - add the posterior of kx over all appearances in seq
+                kx_in_seq = logsumexp(post_ems.take(idx, axis=1), axis=1)
+                N_kx[:, j] = np.logaddexp(N_kx[:, j], kx_in_seq)
     return N_kx, N_kl, sum_ll
 
 def revalue_ems_trans(N_kx, N_kl):
@@ -89,12 +96,13 @@ def Baum_Welch_iteration(emission_mat, transition_mat, seq_lst):
     emission_mat, transition_mat = revalue_ems_trans(N_kx, N_kl)
     return sum_ll, emission_mat, transition_mat
 
+
 def trans_ems_post(trans, ems, seq):
     fmat = Forward(seq, ems, trans).get_matrix()
     bmat = Backward(seq, ems, trans).get_matrix()
     likelihood = Backward(seq, ems, trans).get_backward_prob()
     # emissions posterior probability
-    ems_post =  Posterior(fmat, bmat, seq).get_matrix()
+    ems_post = Posterior(fmat, bmat, seq).get_matrix()
 
     trans_post = np.full(trans.shape, np.NINF)
     for i in range(1, len(seq)):
