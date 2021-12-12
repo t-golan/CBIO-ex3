@@ -2,6 +2,7 @@ import argparse
 from Bio import SeqIO
 import pandas as pd
 import numpy as np
+import motif_find
 
 
 def get_seq(fasta):
@@ -55,6 +56,39 @@ def initial_emissions(alpha, motif):
     # return log
     with np.errstate(divide='ignore'):
         return df.apply(np.log)
+
+
+def get_likelihood_Nkx_Nkl(emission_mat, transition_mat, seq_lst):
+    N_kx = np.full((transition_mat.shape[0], 4), np.NINF)
+    N_kl = np.full((transition_mat.shape[0], transition_mat.shape[0]), np.NINF)
+    sum_ll = 0
+    for seq in seq_lst:
+        post_ems, post_trans, likelihood = trans_ems_post(transition_mat, emission_mat, seq)
+        sum_ll += likelihood
+        with np.errstate(divide='ignore'):
+            N_kl = np.log(np.exp(N_kl) + np.exp(post_trans))
+        for j, ch in enumerate("ACGT"):
+            idx = [i for i, ltr in enumerate(seq) if ltr == ch]
+            if len(idx) != 0:
+                N_kx[:, j] = np.logaddexp(N_kx[:, j], logsumexp(post_ems.take(idx, axis=1), axis=1))
+    return N_kx, N_kl, sum_ll
+
+
+def trans_ems_post(trans, ems, seq):
+    fmat = Forward(seq, ems, trans).get_matrix()
+    bmat = Backward(seq, ems, trans).get_matrix()
+    likelihood = Backward(seq, ems, trans).get_backward_prob()
+    # emissions posterior probability
+    ems_post =  Posterior(fmat, bmat, seq).get_matrix()
+
+    trans_post = np.full(trans.shape, np.NINF)
+    for i in range(1, len(seq)):
+
+        trans_post = np.logaddexp(trans_post,
+                                  (fmat[:, i - 1].reshape(-1, 1) + trans + ems[seq[i]].to_numpy() +
+                                  bmat[:, i].reshape(-1, 1).T - likelihood))
+    return ems_post, trans_post, likelihood
+
 
 
 def main():

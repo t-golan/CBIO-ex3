@@ -137,6 +137,9 @@ class Posterior:
         #        self.mat[i][j] = (self.forward_mat[i][j] + self.backward_mat[i][j])
         #self.mat -= self.seq_prob
 
+    def get_matrix(self):
+        return self.mat
+
     def get_hmm(self):
         # get max of each col
         states = np.argmax(self.mat, axis=0)
@@ -210,6 +213,8 @@ def transition(p, q, k):
     ## added for log:
     with np.errstate(divide='ignore'):
         return np.log(trans)
+
+
 
 
 
