@@ -57,6 +57,12 @@ def initial_emissions(alpha, motif):
     with np.errstate(divide='ignore'):
         return df.apply(np.log)
 
+def get_qp(transiton_matrix):
+    """
+    Gets a transitions matrix and returns a df with only q, p values
+    """
+    return pd.DataFrame(data=(transiton_matrix[0,1], transiton_matrix[1,4]))
+
 
 def get_likelihood_Nkx_Nkl(emission_mat, transition_mat, seq_lst):
     N_kx = np.full((transition_mat.shape[0], 4), np.NINF)
@@ -98,7 +104,7 @@ def main():
 
     # build emissions
     initial_ems = initial_emissions(args.alpha, args.seed)
-    transition_mat = motif_find.transition(args.p, args.q, len(args.seed) + motif_find.EXTERNAL_STATES)
+    initial_trans = motif_find.transition(args.p, args.q, len(args.seed) + motif_find.EXTERNAL_STATES)
     # build emissions
 
     # load fasta
@@ -106,14 +112,25 @@ def main():
     print(seq_lst)
 
     # run Baum-Welch
-    prev_iter = Baum_Welch_iteration(transition_mat, initial_ems, seq_lst)
-    while(True):
-        cur_iter = Baum_Welch_iteration(transition_mat, initial_ems, seq_lst)
-        if cur_iter - prev_iter < args.convergenceThr:
-            break
+    ll_history = open("ll_history.txt", "w+")
+    ems = initial_ems
+    trans = initial_trans
+    prev_iter = Baum_Welch_iteration(trans, initial_ems, seq_lst)
+    ll_history.write(prev_iter + '\n')
+    improvement = np.inf
+    while improvement >= args.convergenceThr:
+        cur_iter = Baum_Welch_iteration(trans, initial_ems, seq_lst)
+        ll_history.write(cur_iter)
+        improvement = cur_iter - prev_iter
         prev_iter = cur_iter
 
     # dump results
+
+    ems.round(2)
+    qp = get_qp(trans).round(4)
+    motif_profile = open("motif_profile.txt", "w+")
+    motif_profile.write(pd.DataFrame.to_string(ems))
+    motif_profile.write(pd.DataFrame.to_string(qp))
 
 
 if __name__ == "__main__":
