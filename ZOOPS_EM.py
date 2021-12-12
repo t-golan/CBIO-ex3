@@ -57,11 +57,11 @@ def initial_emissions(alpha, motif):
     with np.errstate(divide='ignore'):
         return df.apply(np.log)
 
-def get_qp(transiton_matrix):
+def get_qp_round(transiton_matrix):
     """
-    Gets a transitions matrix and returns a df with only q, p values
+    Gets a transitions matrix and returns a df with only q, p values rounded within 4th digits
     """
-    return pd.DataFrame(data=(transiton_matrix[0,1], transiton_matrix[1,4]))
+    return pd.DataFrame(data=(transiton_matrix[0,1], transiton_matrix[1,4])).round(4)
 
 
 def get_likelihood_Nkx_Nkl(emission_mat, transition_mat, seq_lst):
@@ -79,6 +79,15 @@ def get_likelihood_Nkx_Nkl(emission_mat, transition_mat, seq_lst):
                 N_kx[:, j] = np.logaddexp(N_kx[:, j], logsumexp(post_ems.take(idx, axis=1), axis=1))
     return N_kx, N_kl, sum_ll
 
+def revalue_ems_trans(N_kx, N_kl):
+    trans = N_kl / N_kl.sum(axis=0)
+    ems = N_kx / N_kx.sum(axis=0)
+    return ems, trans
+
+def Baum_Welch_iteration(emission_mat, transition_mat, seq_lst):
+    N_kx, N_kl, sum_ll = get_likelihood_Nkx_Nkl(emission_mat, transition_mat, seq_lst)
+    emission_mat, transition_mat = revalue_ems_trans(N_kx, N_kl)
+    return sum_ll, emission_mat, transition_mat
 
 def trans_ems_post(trans, ems, seq):
     fmat = Forward(seq, ems, trans).get_matrix()
@@ -115,22 +124,29 @@ def main():
     ll_history = open("ll_history.txt", "w+")
     ems = initial_ems
     trans = initial_trans
-    prev_iter = Baum_Welch_iteration(trans, initial_ems, seq_lst)
-    ll_history.write(prev_iter + '\n')
+    prev_iter, ems, trans = Baum_Welch_iteration(trans, ems, seq_lst)
+    ll_history.write(str(prev_iter) + '\n')
     improvement = np.inf
     while improvement >= args.convergenceThr:
-        cur_iter = Baum_Welch_iteration(trans, initial_ems, seq_lst)
-        ll_history.write(cur_iter)
+        cur_iter, ems, trans = Baum_Welch_iteration(trans, ems, seq_lst)
+        ll_history.write(str(cur_iter) + '\n')
         improvement = cur_iter - prev_iter
         prev_iter = cur_iter
 
     # dump results
 
     ems.round(2)
-    qp = get_qp(trans).round(4)
-    motif_profile = open("motif_profile.txt", "w+")
-    motif_profile.write(pd.DataFrame.to_string(ems))
-    motif_profile.write(pd.DataFrame.to_string(qp))
+    qp = get_qp_round(trans)
+    with("motif_profile.txt") as motif_profile:
+        motif_profile.write(pd.DataFrame.to_string(ems))
+        motif_profile.write(pd.DataFrame.to_string(qp))
+
+    with("motif_positions.txt") as motif_positions:
+        for seq in seq_lst:
+            idx = Viterbi(seq, ems, trans).get_motif_index()
+            motif_positions.write(str(idx) + '\n')
+
+
 
 
 if __name__ == "__main__":

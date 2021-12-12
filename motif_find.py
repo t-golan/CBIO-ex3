@@ -119,6 +119,8 @@ class Viterbi:
         path_str = "".join(path)[1:-1]
         return path_str
 
+    # def get_motif_index(self):
+
 
 class Posterior:
     def __init__(self, forward, backward, seq):
