@@ -1,5 +1,7 @@
 import argparse
-# from motif_find import...
+
+import motif_find
+from motif_find import *
 
 
 def parse_args():
@@ -22,12 +24,18 @@ def main():
     args = parse_args()
 
     # build transitions 
-
+    transition_mat = motif_find.transition(args.p, args.q, len(args.seed) + motif_find.EXTERNAL_STATES)
     # build emissions 
 
     # load fasta
 
     # run Baum-Welch
+    prev_iter = Baum_Welch_iteration(transition_mat, emmisions_mat, seqs)
+    while(True):
+        cur_iter = Baum_Welch_iteration(transition_mat, emmisions_mat, seqs)
+        if cur_iter - prev_iter < args.convergenceThr:
+            break
+        prev_iter = cur_iter
 
     # dump results
 
