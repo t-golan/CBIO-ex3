@@ -155,8 +155,6 @@ def main():
             motif_positions.write(str(idx) + '\n')
 
 
-
-
 if __name__ == "__main__":
     main()
 
