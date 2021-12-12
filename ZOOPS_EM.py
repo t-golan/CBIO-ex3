@@ -86,30 +86,35 @@ def get_likelihood_Nkx_Nkl(emission_mat, transition_mat, seq_lst):
                 N_kx[:, j] = np.logaddexp(N_kx[:, j], kx_in_seq)
     return N_kx, N_kl, sum_ll
 
-def revalue_ems_trans(N_kx, N_kl):
-    trans = N_kl / N_kl.sum(axis=0)
-    ems = N_kx / N_kx.sum(axis=0)
-    return ems, trans
+def revalue_ems_trans(N_kx, N_kl, transition_mat, emission_mat):
+    trans = N_kl - logsumexp(N_kl, axis=0)
+    ems = N_kx - logsumexp(N_kx, axis=0)
+    emission_mat['A'] = ems[:, 0]
+    emission_mat['C'] = ems[:, 1]
+    emission_mat['G'] = ems[:, 2]
+    emission_mat['T'] = ems[:, 3]
+    return emission_mat, trans
 
-def Baum_Welch_iteration(emission_mat, transition_mat, seq_lst):
+def Baum_Welch_iteration(transition_mat, emission_mat, seq_lst):
+    print("got here")
     N_kx, N_kl, sum_ll = get_likelihood_Nkx_Nkl(emission_mat, transition_mat, seq_lst)
-    emission_mat, transition_mat = revalue_ems_trans(N_kx, N_kl)
+    emission_mat, transition_mat = revalue_ems_trans(N_kx, N_kl, transition_mat, emission_mat)
     return sum_ll, emission_mat, transition_mat
 
 
 def trans_ems_post(trans, ems, seq):
-    fmat = Forward(seq, ems, trans).get_matrix()
-    bmat = Backward(seq, ems, trans).get_matrix()
-    likelihood = Backward(seq, ems, trans).get_backward_prob()
+    f = Forward(seq, ems, trans)
+    b = Backward(seq, ems, trans)
+    likelihood = b.get_backward_prob()
     # emissions posterior probability
-    ems_post = Posterior(fmat, bmat, seq).get_matrix()
+    ems_post = Posterior(f, b, seq).get_matrix()
 
     trans_post = np.full(trans.shape, np.NINF)
     for i in range(1, len(seq)):
 
         trans_post = np.logaddexp(trans_post,
-                                  (fmat[:, i - 1].reshape(-1, 1) + trans + ems[seq[i]].to_numpy() +
-                                  bmat[:, i].reshape(-1, 1).T - likelihood))
+                                  (f.get_matrix()[:, i - 1].reshape(-1, 1) + trans + ems[seq[i]].to_numpy() +
+                                  b.get_matrix()[:, i].reshape(-1, 1).T - likelihood))
     return ems_post, trans_post, likelihood
 
 
@@ -123,33 +128,33 @@ def main():
     initial_ems = initial_emissions(args.alpha, args.seed)
     initial_trans = motif_find.transition(args.p, args.q, len(args.seed) + motif_find.EXTERNAL_STATES)
     # build emissions
-
     # load fasta
     seq_lst = get_seq(SeqIO.parse(open(args.fasta), 'fasta'))
     print(seq_lst)
 
     # run Baum-Welch
-    ll_history = open("ll_history.txt", "w+")
-    ems = initial_ems
-    trans = initial_trans
-    prev_iter, ems, trans = Baum_Welch_iteration(trans, ems, seq_lst)
-    ll_history.write(str(prev_iter) + '\n')
-    improvement = np.inf
-    while improvement >= args.convergenceThr:
-        cur_iter, ems, trans = Baum_Welch_iteration(trans, ems, seq_lst)
-        ll_history.write(str(cur_iter) + '\n')
-        improvement = cur_iter - prev_iter
-        prev_iter = cur_iter
+    with open("ll_history.txt", 'w') as ll_history:
+        ems = initial_ems
+        trans = initial_trans
+        prev_iter, ems, trans = Baum_Welch_iteration(trans, ems, seq_lst)
+        ll_history.write(str(prev_iter) + '\n')
+        improvement = np.inf
+        while improvement >= args.convergenceThr:
+            cur_iter, ems, trans = Baum_Welch_iteration(trans, ems, seq_lst)
+            print('a')
+            ll_history.write(str(cur_iter) + '\n')
+            improvement = cur_iter - prev_iter
+            prev_iter = cur_iter
 
     # dump results
 
     ems.round(2)
     qp = get_qp_round(trans)
-    with("motif_profile.txt") as motif_profile:
+    with open("motif_profile.txt", 'w') as motif_profile:
         motif_profile.write(pd.DataFrame.to_string(ems))
         motif_profile.write(pd.DataFrame.to_string(qp))
 
-    with("motif_positions.txt") as motif_positions:
+    with open("motif_positions.txt", 'w') as motif_positions:
         for seq in seq_lst:
             idx = Viterbi(seq, ems, trans).get_motif_index()
             motif_positions.write(str(idx) + '\n')
