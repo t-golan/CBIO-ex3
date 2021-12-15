@@ -121,7 +121,7 @@ class Viterbi:
 
     def get_motif_index(self):
         path_str = self.get_viterbi_path()
-        return path_str.find('M')
+        return path_str.find(MOTIF)
 
 class Posterior:
     def __init__(self, forward, backward, seq):
