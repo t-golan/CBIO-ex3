@@ -2,17 +2,23 @@ import argparse
 from Bio import SeqIO
 import pandas as pd
 import numpy as np
-import motif_find
+from motif_find import *
 
+"""
+Tamir Golan and Maayan Amid
+Ex3
+"""
 
 def get_seq(fasta):
+    """
+    reads fasta file
+    @param fasta: file to read
+    @return: list of sequences
+    """
     seq_lst = []
     for f in fasta:
         seq_lst.append("^" + str(f.seq) + "$")
     return seq_lst
-
-import motif_find
-from motif_find import *
 
 
 def parse_args():
@@ -32,6 +38,12 @@ def parse_args():
 
 
 def initial_emissions(alpha, motif):
+    """
+    create initial emissions df
+    @param alpha:
+    @param motif:
+    @return: emissions df
+    """
     # initalize emissions dataframe for motif, filled with alpha
     k = len(motif)
     df = pd.DataFrame(
@@ -57,14 +69,16 @@ def initial_emissions(alpha, motif):
     with np.errstate(divide='ignore'):
         return df.apply(np.log)
 
-def get_qp_round(transiton_matrix):
-    """
-    Gets a transitions matrix and returns a df with only q, p values rounded within 4th digits
-    """
-    return pd.DataFrame(data=(transiton_matrix[0,1], transiton_matrix[1,4])).round(4)
 
 
 def expectation_phase(emission_mat, transition_mat, seq_lst):
+    """
+    gets Nkx and Nkl based on current emissions and transitions
+    @param emission_mat:
+    @param transition_mat:
+    @param seq_lst:
+    @return: N_kx, N_kl, sum log likelihood
+    """
     # N_kx is size of emissions matrix (only for AGCT)
     N_kx = np.full((transition_mat.shape[0], 4), np.NINF)
     # Nkl is size of transitions matrix
@@ -76,7 +90,7 @@ def expectation_phase(emission_mat, transition_mat, seq_lst):
         sum_ll += likelihood
         with np.errstate(divide='ignore'):
             N_kl = np.logaddexp(N_kl, post_trans)
-        #iterate over ACGT (in same order as they appear in emissions df)
+        # iterate over ACGT (in same order as they appear in emissions df)
         for j, ch in enumerate("ACGT"):
             # get all indexes of letter in sequence
             idx = [i for i, ltr in enumerate(seq) if ltr == ch]
@@ -88,10 +102,16 @@ def expectation_phase(emission_mat, transition_mat, seq_lst):
 
 
 def maximization_phase(N_kx, N_kl):
+    """
+    updated transition and emission
+    @param N_kx:
+    @param N_kl:
+    @return: ems, trans
+    """
     # calculate updated p and q and update transitions
     p = np.exp(np.logaddexp(N_kl[1][4], N_kl[2][3]) - logsumexp(N_kl[[1, 2], :]))
     q = np.exp(N_kl[0][1] - logsumexp(N_kl[0, :]))
-    trans = motif_find.transition(p, q, N_kl.shape[0])
+    trans = transition(p, q, N_kl.shape[0])
 
     ### old code - problematic
     # trans = N_kl - logsumexp(N_kl, axis=0)
@@ -113,12 +133,26 @@ def maximization_phase(N_kx, N_kl):
 
 
 def Baum_Welch_iteration(transition_mat, emission_mat, seq_lst):
+    """
+    single algorithm iteration
+    @param transition_mat:
+    @param emission_mat:
+    @param seq_lst:
+    @return: sum log likelihood, emission_mat, transition_mat
+    """
     N_kx, N_kl, sum_ll = expectation_phase(emission_mat, transition_mat, seq_lst)
     emission_mat, transition_mat = maximization_phase(N_kx, N_kl)
     return sum_ll, emission_mat, transition_mat
 
 
 def trans_ems_post(trans, ems, seq):
+    """
+    get probabilities for single sequence
+    @param trans:
+    @param ems:
+    @param seq:
+    @return: emsissions posterior, transitions posterior, likelihood
+    """
     f = Forward(seq, ems, trans)
     b = Backward(seq, ems, trans)
     likelihood = b.get_backward_prob()
@@ -134,13 +168,12 @@ def trans_ems_post(trans, ems, seq):
     return ems_post, trans_post, likelihood
 
 
-
 def main():
     args = parse_args()
 
     # build transitions
-    trans = motif_find.transition(args.p, args.q, len(
-        args.seed) + motif_find.EXTERNAL_STATES)
+    trans = transition(args.p, args.q, len(
+        args.seed) + EXTERNAL_STATES)
 
     # build emissions
     ems = initial_emissions(args.alpha, args.seed)
